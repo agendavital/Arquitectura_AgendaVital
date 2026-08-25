@@ -1,0 +1,381 @@
+generator client {
+  provider        = "prisma-client"
+  previewFeatures = ["partialIndexes"]
+  output = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+model AlertaSeguridad {
+  AlertaSeguridadId BigInt    @id(map: "PK_AlertaSeguridad") @default(autoincrement())
+  UsuarioId         Int?
+  Tipo              String    @db.VarChar(60)
+  Severidad         String    @db.VarChar(15)
+  Detalle           String
+  GeneradaEn        DateTime  @default(dbgenerated("sysutcdatetime()"), map: "DF_AlertaSeguridad_GeneradaEn")
+  AtendidaEn        DateTime?
+  Usuario           Usuario?  @relation(fields: [UsuarioId], references: [UsuarioId], onDelete: NoAction, onUpdate: NoAction, map: "FK_AlertaSeguridad_Usuario")
+}
+
+model Auditoria {
+  AuditoriaId BigInt   @id(map: "PK_Auditoria") @default(autoincrement())
+  UsuarioId   Int?
+  Accion      String   @db.VarChar(80)
+  Entidad     String   @db.VarChar(80)
+  EntidadId   String?  @db.VarChar(80)
+  Detalle     String?  @db.NVarChar(Max)
+  DireccionIp String?  @db.VarChar(45)
+  Fecha       DateTime @default(dbgenerated("sysutcdatetime()"), map: "DF_Auditoria_Fecha")
+  Usuario     Usuario? @relation(fields: [UsuarioId], references: [UsuarioId], onDelete: NoAction, onUpdate: NoAction, map: "FK_Auditoria_Usuario")
+
+  @@index([UsuarioId, Fecha(sort: Desc)], map: "IX_Auditoria_UsuarioFecha")
+}
+
+model Candidato {
+  CandidatoId        Int                  @id(map: "PK_Candidato") @default(autoincrement())
+  UsuarioId          Int                  @unique(map: "UQ_Candidato_Usuario")
+  TipoDocumento      String               @db.VarChar(10)
+  NumeroDocumento    String               @db.VarChar(30)
+  FechaNacimiento    DateTime?            @db.Date
+  CargoAspirado      String?              @db.NVarChar(120)
+  CreadoEn           DateTime             @default(dbgenerated("sysutcdatetime()"), map: "DF_Candidato_CreadoEn")
+  Usuario            Usuario              @relation(fields: [UsuarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_Candidato_Usuario")
+  ProcesoOcupacional ProcesoOcupacional[]
+
+  @@unique([TipoDocumento, NumeroDocumento], map: "UQ_Candidato_Documento")
+}
+
+model Cita {
+  CitaId                BigInt                 @id(map: "PK_Cita") @default(autoincrement())
+  SolicitudExamenId     BigInt                 @unique(map: "UQ_Cita_Solicitud")
+  DisponibilidadId      BigInt                 @unique(map: "UQ_Cita_Disponibilidad")
+  EstadoCitaId          Int                    @db.TinyInt
+  CreadaPorUsuarioId    Int
+  ConfirmadaEn          DateTime?
+  CanceladaEn           DateTime?
+  MotivoCancelacion     String?                @db.NVarChar(500)
+  CreadaEn              DateTime               @default(dbgenerated("sysutcdatetime()"), map: "DF_Cita_CreadaEn")
+  Usuario               Usuario                @relation(fields: [CreadaPorUsuarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_Cita_CreadaPor")
+  Disponibilidad        Disponibilidad         @relation(fields: [DisponibilidadId], references: [DisponibilidadId], onUpdate: NoAction, map: "FK_Cita_Disponibilidad")
+  EstadoCita            EstadoCita             @relation(fields: [EstadoCitaId], references: [EstadoCitaId], onUpdate: NoAction, map: "FK_Cita_Estado")
+  SolicitudExamen       SolicitudExamen        @relation(fields: [SolicitudExamenId], references: [SolicitudExamenId], onUpdate: NoAction, map: "FK_Cita_Solicitud")
+  EvaluacionOcupacional EvaluacionOcupacional?
+  Notificacion          Notificacion[]
+
+  @@index([EstadoCitaId, CreadaEn(sort: Desc)], map: "IX_Cita_EstadoCreadaEn")
+}
+
+model Clinica {
+  ClinicaId      Int              @id(map: "PK_Clinica") @default(autoincrement())
+  Nit            String           @unique(map: "UQ_Clinica_Nit") @db.VarChar(20)
+  Nombre         String           @db.NVarChar(150)
+  Direccion      String?          @db.NVarChar(250)
+  Ciudad         String?          @db.NVarChar(100)
+  Correo         String?          @db.NVarChar(254)
+  Telefono       String?          @db.VarChar(30)
+  Activa         Boolean          @default(true, map: "DF_Clinica_Activa")
+  Disponibilidad Disponibilidad[]
+  Profesional    Profesional[]
+  Usuario        Usuario[]
+}
+
+model ConceptoOcupacional {
+  ConceptoOcupacionalId Int                     @id(map: "PK_ConceptoOcupacional") @default(autoincrement()) @db.TinyInt
+  Codigo                String                  @unique(map: "UQ_ConceptoOcupacional_Codigo") @db.VarChar(30)
+  Nombre                String                  @db.NVarChar(80)
+  EvaluacionOcupacional EvaluacionOcupacional[]
+}
+
+model Disponibilidad {
+  DisponibilidadId BigInt       @id(map: "PK_Disponibilidad") @default(autoincrement())
+  ClinicaId        Int
+  ProfesionalId    Int?
+  InicioEn         DateTime
+  FinEn            DateTime
+  Estado           String       @default("DISPONIBLE", map: "DF_Disponibilidad_Estado") @db.VarChar(20)
+  Cita             Cita?
+  Clinica          Clinica      @relation(fields: [ClinicaId], references: [ClinicaId], onUpdate: NoAction, map: "FK_Disponibilidad_Clinica")
+  Profesional      Profesional? @relation(fields: [ProfesionalId], references: [ProfesionalId], onDelete: NoAction, onUpdate: NoAction, map: "FK_Disponibilidad_Profesional")
+
+  @@index([ClinicaId, InicioEn, FinEn, Estado], map: "IX_Disponibilidad_ClinicaFecha")
+}
+
+model DocumentoProceso {
+  DocumentoProcesoId                                     BigInt             @id(map: "PK_DocumentoProceso") @default(autoincrement())
+  ProcesoOcupacionalId                                   BigInt
+  TipoDocumentoId                                        Int                @db.SmallInt
+  EstadoDocumentoId                                      Int                @db.TinyInt
+  NombreArchivo                                          String             @db.NVarChar(260)
+  UbicacionSegura                                        String             @db.NVarChar(700)
+  TipoMime                                               String             @db.VarChar(100)
+  TamanoBytes                                            BigInt
+  FechaVencimiento                                       DateTime?          @db.Date
+  SubidoPorUsuarioId                                     Int
+  RevisadoPorUsuarioId                                   Int?
+  RevisadoEn                                             DateTime?
+  ObservacionRevision                                    String?
+  CreadoEn                                               DateTime           @default(dbgenerated("sysutcdatetime()"), map: "DF_Documento_CreadoEn")
+  EstadoDocumento                                        EstadoDocumento    @relation(fields: [EstadoDocumentoId], references: [EstadoDocumentoId], onUpdate: NoAction, map: "FK_Documento_Estado")
+  ProcesoOcupacional                                     ProcesoOcupacional @relation(fields: [ProcesoOcupacionalId], references: [ProcesoOcupacionalId], onUpdate: NoAction, map: "FK_Documento_Proceso")
+  Usuario_DocumentoProceso_RevisadoPorUsuarioIdToUsuario Usuario?           @relation("DocumentoProceso_RevisadoPorUsuarioIdToUsuario", fields: [RevisadoPorUsuarioId], references: [UsuarioId], onDelete: NoAction, onUpdate: NoAction, map: "FK_Documento_RevisadoPor")
+  Usuario_DocumentoProceso_SubidoPorUsuarioIdToUsuario   Usuario            @relation("DocumentoProceso_SubidoPorUsuarioIdToUsuario", fields: [SubidoPorUsuarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_Documento_SubidoPor")
+  TipoDocumento                                          TipoDocumento      @relation(fields: [TipoDocumentoId], references: [TipoDocumentoId], onUpdate: NoAction, map: "FK_Documento_Tipo")
+
+  @@index([ProcesoOcupacionalId, EstadoDocumentoId], map: "IX_Documento_ProcesoEstado")
+}
+
+model Empresa {
+  EmpresaId          Int                  @id(map: "PK_Empresa") @default(autoincrement())
+  Nit                String               @unique(map: "UQ_Empresa_Nit") @db.VarChar(20)
+  RazonSocial        String               @db.NVarChar(150)
+  Correo             String?              @db.NVarChar(254)
+  Telefono           String?              @db.VarChar(30)
+  Activa             Boolean              @default(true, map: "DF_Empresa_Activa")
+  CreadoEn           DateTime             @default(dbgenerated("sysutcdatetime()"), map: "DF_Empresa_CreadoEn")
+  ProcesoOcupacional ProcesoOcupacional[]
+  Usuario            Usuario[]
+}
+
+model EstadoCita {
+  EstadoCitaId Int    @id(map: "PK_EstadoCita") @default(autoincrement()) @db.TinyInt
+  Codigo       String @unique(map: "UQ_EstadoCita_Codigo") @db.VarChar(40)
+  Nombre       String @db.NVarChar(80)
+  Cita         Cita[]
+}
+
+model EstadoDocumento {
+  EstadoDocumentoId Int                @id(map: "PK_EstadoDocumento") @default(autoincrement()) @db.TinyInt
+  Codigo            String             @unique(map: "UQ_EstadoDocumento_Codigo") @db.VarChar(40)
+  Nombre            String             @db.NVarChar(80)
+  DocumentoProceso  DocumentoProceso[]
+}
+
+model EstadoProceso {
+  EstadoProcesoId    Int                  @id(map: "PK_EstadoProceso") @default(autoincrement()) @db.TinyInt
+  Codigo             String               @unique(map: "UQ_EstadoProceso_Codigo") @db.VarChar(40)
+  Nombre             String               @db.NVarChar(80)
+  ProcesoOcupacional ProcesoOcupacional[]
+}
+
+model EstadoSolicitud {
+  EstadoSolicitudId Int               @id(map: "PK_EstadoSolicitud") @default(autoincrement()) @db.TinyInt
+  Codigo            String            @unique(map: "UQ_EstadoSolicitud_Codigo") @db.VarChar(40)
+  Nombre            String            @db.NVarChar(80)
+  SolicitudExamen   SolicitudExamen[]
+}
+
+model EvaluacionOcupacional {
+  EvaluacionOcupacionalId    BigInt               @id(map: "PK_EvaluacionOcupacional") @default(autoincrement())
+  CitaId                     BigInt               @unique(map: "UQ_Evaluacion_Cita")
+  ProfesionalId              Int
+  ConceptoOcupacionalId      Int?                 @db.TinyInt
+  ResultadoResumen           String?              @db.NVarChar(2000)
+  Hallazgos                  String?              @db.NVarChar(Max)
+  ObservacionClinica         String?              @db.NVarChar(Max)
+  CertificadoUbicacionSegura String?              @db.NVarChar(700)
+  EvaluadaEn                 DateTime             @default(dbgenerated("sysutcdatetime()"), map: "DF_Evaluacion_EvaluadaEn")
+  CerradaEn                  DateTime?
+  Cita                       Cita                 @relation(fields: [CitaId], references: [CitaId], onUpdate: NoAction, map: "FK_Evaluacion_Cita")
+  ConceptoOcupacional        ConceptoOcupacional? @relation(fields: [ConceptoOcupacionalId], references: [ConceptoOcupacionalId], onDelete: NoAction, onUpdate: NoAction, map: "FK_Evaluacion_Concepto")
+  Profesional                Profesional          @relation(fields: [ProfesionalId], references: [ProfesionalId], onUpdate: NoAction, map: "FK_Evaluacion_Profesional")
+  Restriccion                Restriccion[]
+}
+
+model IntentoNotificacion {
+  IntentoNotificacionId BigInt       @id(map: "PK_IntentoNotificacion") @default(autoincrement())
+  NotificacionId        BigInt
+  NumeroIntento         Int          @db.TinyInt
+  FechaIntento          DateTime     @default(dbgenerated("sysutcdatetime()"), map: "DF_Intento_Fecha")
+  Estado                String       @db.VarChar(20)
+  ReferenciaProveedor   String?      @db.NVarChar(150)
+  DetalleError          String?
+  Notificacion          Notificacion @relation(fields: [NotificacionId], references: [NotificacionId], onUpdate: NoAction, map: "FK_Intento_Notificacion")
+
+  @@unique([NotificacionId, NumeroIntento], map: "UQ_Intento_NotificacionNumero")
+}
+
+model Notificacion {
+  NotificacionId        BigInt                @id(map: "PK_Notificacion") @default(autoincrement())
+  UsuarioDestinatarioId Int
+  ProcesoOcupacionalId  BigInt?
+  CitaId                BigInt?
+  TipoEvento            String                @db.VarChar(60)
+  Canal                 String                @db.VarChar(20)
+  Asunto                String?               @db.NVarChar(200)
+  Mensaje               String                @db.NVarChar(Max)
+  Estado                String                @default("PENDIENTE", map: "DF_Notificacion_Estado") @db.VarChar(20)
+  ProgramadaEn          DateTime              @default(dbgenerated("sysutcdatetime()"), map: "DF_Notificacion_ProgramadaEn")
+  LeidaEn               DateTime?
+  IntentoNotificacion   IntentoNotificacion[]
+  Cita                  Cita?                 @relation(fields: [CitaId], references: [CitaId], onDelete: NoAction, onUpdate: NoAction, map: "FK_Notificacion_Cita")
+  Usuario               Usuario               @relation(fields: [UsuarioDestinatarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_Notificacion_Destinatario")
+  ProcesoOcupacional    ProcesoOcupacional?   @relation(fields: [ProcesoOcupacionalId], references: [ProcesoOcupacionalId], onDelete: NoAction, onUpdate: NoAction, map: "FK_Notificacion_Proceso")
+
+  @@index([Estado, ProgramadaEn], map: "IX_Notificacion_Pendiente", where: raw("([Estado]='PENDIENTE')"))
+}
+
+model Permiso {
+  PermisoId   Int          @id(map: "PK_Permiso") @default(autoincrement()) @db.SmallInt
+  Codigo      String       @unique(map: "UQ_Permiso_Codigo") @db.VarChar(80)
+  Nombre      String       @db.NVarChar(120)
+  Descripcion String?      @db.NVarChar(250)
+  RolPermiso  RolPermiso[]
+}
+
+model ProcesoOcupacional {
+  ProcesoOcupacionalId      BigInt             @id(map: "PK_ProcesoOcupacional") @default(autoincrement())
+  CandidatoId               Int
+  EmpresaId                 Int
+  EstadoProcesoId           Int                @db.TinyInt
+  FechaInicio               DateTime           @default(dbgenerated("CONVERT([date],sysutcdatetime())"), map: "DF_Proceso_FechaInicio") @db.Date
+  FechaCierre               DateTime?          @db.Date
+  ObservacionAdministrativa String?
+  CreadoPorUsuarioId        Int
+  CreadoEn                  DateTime           @default(dbgenerated("sysutcdatetime()"), map: "DF_Proceso_CreadoEn")
+  DocumentoProceso          DocumentoProceso[]
+  Notificacion              Notificacion[]
+  Candidato                 Candidato          @relation(fields: [CandidatoId], references: [CandidatoId], onUpdate: NoAction, map: "FK_Proceso_Candidato")
+  Usuario                   Usuario            @relation(fields: [CreadoPorUsuarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_Proceso_CreadoPor")
+  Empresa                   Empresa            @relation(fields: [EmpresaId], references: [EmpresaId], onUpdate: NoAction, map: "FK_Proceso_Empresa")
+  EstadoProceso             EstadoProceso      @relation(fields: [EstadoProcesoId], references: [EstadoProcesoId], onUpdate: NoAction, map: "FK_Proceso_Estado")
+  SolicitudExamen           SolicitudExamen[]
+
+  @@index([CandidatoId, FechaInicio(sort: Desc)], map: "IX_Proceso_Candidato")
+  @@index([EmpresaId, EstadoProcesoId, FechaInicio(sort: Desc)], map: "IX_Proceso_EmpresaEstado")
+}
+
+model Profesional {
+  ProfesionalId         Int                     @id(map: "PK_Profesional") @default(autoincrement())
+  UsuarioId             Int                     @unique(map: "UQ_Profesional_Usuario")
+  ClinicaId             Int
+  RegistroProfesional   String                  @unique(map: "UQ_Profesional_Registro") @db.VarChar(60)
+  Especialidad          String?                 @db.NVarChar(120)
+  Activo                Boolean                 @default(true, map: "DF_Profesional_Activo")
+  Disponibilidad        Disponibilidad[]
+  EvaluacionOcupacional EvaluacionOcupacional[]
+  Clinica               Clinica                 @relation(fields: [ClinicaId], references: [ClinicaId], onUpdate: NoAction, map: "FK_Profesional_Clinica")
+  Usuario               Usuario                 @relation(fields: [UsuarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_Profesional_Usuario")
+}
+
+model Restriccion {
+  RestriccionId           BigInt                @id(map: "PK_Restriccion") @default(autoincrement())
+  EvaluacionOcupacionalId BigInt
+  Descripcion             String
+  VigenteDesde            DateTime?             @db.Date
+  VigenteHasta            DateTime?             @db.Date
+  EvaluacionOcupacional   EvaluacionOcupacional @relation(fields: [EvaluacionOcupacionalId], references: [EvaluacionOcupacionalId], onUpdate: NoAction, map: "FK_Restriccion_Evaluacion")
+}
+
+model Rol {
+  RolId       Int          @id(map: "PK_Rol") @default(autoincrement()) @db.SmallInt
+  Codigo      String       @unique(map: "UQ_Rol_Codigo") @db.VarChar(40)
+  Nombre      String       @db.NVarChar(80)
+  Descripcion String?      @db.NVarChar(250)
+  RolPermiso  RolPermiso[]
+  UsuarioRol  UsuarioRol[]
+}
+
+model RolPermiso {
+  RolId     Int     @db.SmallInt
+  PermisoId Int     @db.SmallInt
+  Permiso   Permiso @relation(fields: [PermisoId], references: [PermisoId], onUpdate: NoAction, map: "FK_RolPermiso_Permiso")
+  Rol       Rol     @relation(fields: [RolId], references: [RolId], onUpdate: NoAction, map: "FK_RolPermiso_Rol")
+
+  @@id([RolId, PermisoId], map: "PK_RolPermiso")
+}
+
+model SolicitudExamen {
+  SolicitudExamenId      BigInt             @id(map: "PK_SolicitudExamen") @default(autoincrement())
+  ProcesoOcupacionalId   BigInt
+  TipoExamenId           Int                @db.SmallInt
+  EstadoSolicitudId      Int                @db.TinyInt
+  SolicitadoPorUsuarioId Int
+  Observacion            String?
+  SolicitadaEn           DateTime           @default(dbgenerated("sysutcdatetime()"), map: "DF_Solicitud_SolicitadaEn")
+  Cita                   Cita?
+  EstadoSolicitud        EstadoSolicitud    @relation(fields: [EstadoSolicitudId], references: [EstadoSolicitudId], onUpdate: NoAction, map: "FK_Solicitud_Estado")
+  ProcesoOcupacional     ProcesoOcupacional @relation(fields: [ProcesoOcupacionalId], references: [ProcesoOcupacionalId], onUpdate: NoAction, map: "FK_Solicitud_Proceso")
+  Usuario                Usuario            @relation(fields: [SolicitadoPorUsuarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_Solicitud_SolicitadoPor")
+  TipoExamen             TipoExamen         @relation(fields: [TipoExamenId], references: [TipoExamenId], onUpdate: NoAction, map: "FK_Solicitud_Tipo")
+
+  @@index([ProcesoOcupacionalId, EstadoSolicitudId], map: "IX_Solicitud_ProcesoEstado")
+}
+
+model sysdiagrams {
+  name         String @db.NVarChar(128)
+  principal_id Int
+  diagram_id   Int    @id(map: "PK__sysdiagr__C2B05B6100696CA1") @default(autoincrement())
+  version      Int?
+  definition   Bytes?
+
+  @@unique([principal_id, name], map: "UK_principal_name")
+}
+
+model TipoDocumento {
+  TipoDocumentoId     Int                @id(map: "PK_TipoDocumento") @default(autoincrement()) @db.SmallInt
+  Codigo              String             @unique(map: "UQ_TipoDocumento_Codigo") @db.VarChar(40)
+  Nombre              String             @db.NVarChar(100)
+  EsObligatorio       Boolean            @default(false, map: "DF_TipoDocumento_Obligatorio")
+  RequiereVencimiento Boolean            @default(false, map: "DF_TipoDocumento_Vencimiento")
+  Activo              Boolean            @default(true, map: "DF_TipoDocumento_Activo")
+  DocumentoProceso    DocumentoProceso[]
+}
+
+model TipoExamen {
+  TipoExamenId    Int               @id(map: "PK_TipoExamen") @default(autoincrement()) @db.SmallInt
+  Codigo          String            @unique(map: "UQ_TipoExamen_Codigo") @db.VarChar(30)
+  Nombre          String            @db.NVarChar(80)
+  Activo          Boolean           @default(true, map: "DF_TipoExamen_Activo")
+  SolicitudExamen SolicitudExamen[]
+}
+
+model TokenRecuperacion {
+  TokenRecuperacionId BigInt    @id(map: "PK_TokenRecuperacion") @default(autoincrement())
+  UsuarioId           Int
+  TokenHash           String    @unique(map: "UQ_TokenRecuperacion_Hash") @db.Char(64)
+  ExpiraEn            DateTime
+  UsadoEn             DateTime?
+  CreadoEn            DateTime  @default(dbgenerated("sysutcdatetime()"), map: "DF_TokenRecuperacion_CreadoEn")
+  Usuario             Usuario   @relation(fields: [UsuarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_TokenRecuperacion_Usuario")
+}
+
+model Usuario {
+  UsuarioId                                                       Int                  @id(map: "PK_Usuario") @default(autoincrement())
+  EmpresaId                                                       Int?
+  ClinicaId                                                       Int?
+  Correo                                                          String               @unique(map: "UQ_Usuario_Correo") @db.NVarChar(254)
+  HashContrasena                                                  String               @db.NVarChar(255)
+  Nombres                                                         String               @db.NVarChar(100)
+  Apellidos                                                       String               @db.NVarChar(100)
+  Telefono                                                        String?              @db.VarChar(30)
+  Activo                                                          Boolean              @default(true, map: "DF_Usuario_Activo")
+  UltimoAccesoEn                                                  DateTime?
+  CreadoEn                                                        DateTime             @default(dbgenerated("sysutcdatetime()"), map: "DF_Usuario_CreadoEn")
+  AlertaSeguridad                                                 AlertaSeguridad[]
+  Auditoria                                                       Auditoria[]
+  Candidato                                                       Candidato?
+  Cita                                                            Cita[]
+  DocumentoProceso_DocumentoProceso_RevisadoPorUsuarioIdToUsuario DocumentoProceso[]   @relation("DocumentoProceso_RevisadoPorUsuarioIdToUsuario")
+  DocumentoProceso_DocumentoProceso_SubidoPorUsuarioIdToUsuario   DocumentoProceso[]   @relation("DocumentoProceso_SubidoPorUsuarioIdToUsuario")
+  Notificacion                                                    Notificacion[]
+  ProcesoOcupacional                                              ProcesoOcupacional[]
+  Profesional                                                     Profesional?
+  SolicitudExamen                                                 SolicitudExamen[]
+  TokenRecuperacion                                               TokenRecuperacion[]
+  Clinica                                                         Clinica?             @relation(fields: [ClinicaId], references: [ClinicaId], onDelete: NoAction, onUpdate: NoAction, map: "FK_Usuario_Clinica")
+  Empresa                                                         Empresa?             @relation(fields: [EmpresaId], references: [EmpresaId], onDelete: NoAction, onUpdate: NoAction, map: "FK_Usuario_Empresa")
+  UsuarioRol                                                      UsuarioRol[]
+}
+
+model UsuarioRol {
+  UsuarioId  Int
+  RolId      Int      @db.SmallInt
+  AsignadoEn DateTime @default(dbgenerated("sysutcdatetime()"), map: "DF_UsuarioRol_AsignadoEn")
+  Rol        Rol      @relation(fields: [RolId], references: [RolId], onUpdate: NoAction, map: "FK_UsuarioRol_Rol")
+  Usuario    Usuario  @relation(fields: [UsuarioId], references: [UsuarioId], onUpdate: NoAction, map: "FK_UsuarioRol_Usuario")
+
+  @@id([UsuarioId, RolId], map: "PK_UsuarioRol")
+}

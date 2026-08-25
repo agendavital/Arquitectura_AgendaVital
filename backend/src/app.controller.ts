@@ -1,12 +1,32 @@
 import { Controller, Get } from '@nestjs/common';
-import { AppService } from './app.service';
+import { PrismaService } from './database/prisma/prisma.service';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   @Get()
   getHello(): string {
-    return this.appService.getHello();
+    return 'AgendaVital Backend funcionando';
+  }
+
+  @Get('prueba-db')
+  async pruebaDB() {
+    const usuarios = await this.prisma.usuario.findMany({
+      take: 5,
+      select: {
+        UsuarioId: true,
+        Correo: true,
+        Nombres: true,
+        Apellidos: true,
+        Activo: true,
+      },
+    });
+
+    return {
+      conectado: true,
+      cantidad: usuarios.length,
+      usuarios,
+    };
   }
 }
