@@ -12,6 +12,16 @@ export async function loginWithCredentials({ email, password }) {
   return session;
 }
 
+export async function loginWithGoogle(credential) {
+  const session = await apiRequest("/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential })
+  });
+
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
 export function getStoredSession() {
   const raw = sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;

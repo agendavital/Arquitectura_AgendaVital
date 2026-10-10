@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import { compare } from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../database/prisma/prisma.service';
 
 const SESSION_DURATION_SECONDS = 60 * 60;
@@ -35,6 +37,10 @@ type RecoveryInput = {
   email?: unknown;
 };
 
+type GoogleLoginInput = {
+  credential?: unknown;
+};
+
 type UsuarioConRoles = {
   UsuarioId: number;
   Correo: string;
@@ -51,6 +57,7 @@ type UsuarioConRoles = {
 @Injectable()
 export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
+  private readonly googleClient = new OAuth2Client();
 
   async login(input: LoginInput) {
     const email = this.readEmail(input.email);
@@ -72,6 +79,52 @@ export class AuthService {
     const passwordMatches = await compare(password, usuario.HashContrasena);
     if (!passwordMatches) {
       throw new UnauthorizedException('Correo o contrasena incorrectos.');
+    }
+
+    return this.createSession(usuario);
+  }
+
+  async loginWithGoogle(input: GoogleLoginInput) {
+    const credential = this.readGoogleCredential(input.credential);
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+
+    if (!clientId) {
+      throw new InternalServerErrorException(
+        'GOOGLE_CLIENT_ID no esta configurado en el backend.',
+      );
+    }
+
+    let payload;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: credential,
+        audience: clientId,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('La credencial de Google no es valida.');
+    }
+
+    const email = payload?.email?.trim().toLowerCase();
+    if (!email || payload?.email_verified !== true) {
+      throw new UnauthorizedException(
+        'No se pudo verificar el correo de Google.',
+      );
+    }
+
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { Correo: email },
+      include: {
+        UsuarioRol: {
+          include: { Rol: true },
+        },
+      },
+    });
+
+    if (!usuario || !usuario.Activo) {
+      throw new UnauthorizedException(
+        'No existe una cuenta activa de AgendaVital con ese correo.',
+      );
     }
 
     return this.createSession(usuario);
@@ -107,6 +160,14 @@ export class AuthService {
     }
 
     return value;
+  }
+
+  private readGoogleCredential(value: unknown) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new BadRequestException('La credencial de Google es obligatoria.');
+    }
+
+    return value.trim();
   }
 
   private async createSession(usuario: UsuarioConRoles) {

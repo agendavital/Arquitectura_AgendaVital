@@ -10,6 +10,10 @@ type ForgotPasswordBody = {
   email?: unknown;
 };
 
+type GoogleLoginBody = {
+  credential?: unknown;
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -22,5 +26,10 @@ export class AuthController {
   @Post('forgot-password')
   forgotPassword(@Body() body: ForgotPasswordBody) {
     return this.authService.requestPasswordRecovery(body);
+  }
+
+  @Post('google')
+  loginWithGoogle(@Body() body: GoogleLoginBody) {
+    return this.authService.loginWithGoogle(body);
   }
 }
